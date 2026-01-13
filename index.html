@@ -279,6 +279,12 @@
         renderSummary();
         alert(`Payment added successfully for ${firstName} ${lastName} (ID: ${id})`);
         this.reset();
+    <script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js")
+      .then(() => console.log("Service Worker registered"));
+  }
+</script>
       });
     });
   </script>
@@ -305,5 +311,6 @@
     }
   ]
 }
+
 
 
