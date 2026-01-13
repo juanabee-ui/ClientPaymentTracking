@@ -3,25 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <title>Client Payment Tracker</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
-    form { margin-bottom: 16px; padding: 12px; border: 1px solid #ddd; border-radius: 6px; }
-    h3 { margin: 0 0 10px; }
-    input, select, button { margin: 4px; padding: 8px; }
-    table { width: 100%; border-collapse: collapse; margin: 14px 0; }
-    th, td { border: 1px solid #ddd; padding: 8px; }
-    .filters, .search-bar { margin: 10px 0; }
-    .status-outstanding { background: #fff8e6; }
-    .status-paid { background: #eef9f1; }
-    <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#2ecc71">
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <h1>Client Payment Tracker</h1>
 
-  <!-- Add Charge (Debit) -->
+  <!-- Add Charge -->
   <form id="chargeForm">
     <h3>Add Charge</h3>
     <input type="text" id="chargeClientId" placeholder="Client ID" required>
@@ -32,7 +19,7 @@
     <button type="submit">Add Charge</button>
   </form>
 
-  <!-- Add Payment (Credit) -->
+  <!-- Add Payment -->
   <form id="paymentForm">
     <h3>Add Payment</h3>
     <input type="text" id="clientId" placeholder="Client ID" required>
@@ -54,7 +41,7 @@
     <button id="filterPaid" type="button">Show Paid</button>
   </div>
 
-  <!-- Clients summary (includes last date/remarks) -->
+  <!-- Clients summary -->
   <table id="clientsTable">
     <thead>
       <tr>
@@ -64,8 +51,8 @@
         <th>Total Payments</th>
         <th>Balance</th>
         <th>Status</th>
-        <th>Last date added</th>
-        <th>Last remarks</th>
+        <th>Last Date Added</th>
+        <th>Last Remarks</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -84,9 +71,9 @@
       <tr>
         <th>Client ID</th>
         <th>Name</th>
-        <th>Date added</th>
-        <th>Debit (Charge)</th>
-        <th>Credit (Payment)</th>
+        <th>Date Added</th>
+        <th>Debit</th>
+        <th>Credit</th>
         <th>Method</th>
         <th>Remarks</th>
       </tr>
@@ -94,223 +81,119 @@
     <tbody></tbody>
   </table>
 
-  <script>
-    // Data
-    let clients = JSON.parse(localStorage.getItem('clients')) || {};
-    let currentFilter = 'all'; // 'all' | 'outstanding' | 'paid'
+<script>
+let clients = JSON.parse(localStorage.getItem('clients')) || {};
+let currentFilter = 'all';
 
-    // Helpers
-    function save() {
-      localStorage.setItem('clients', JSON.stringify(clients));
+function save(){ localStorage.setItem('clients', JSON.stringify(clients)); }
+function computeBalance(c){ return (c.debit||0) - (c.credit||0); }
+
+function renderTable(){
+  const tbody=document.querySelector('#clientsTable tbody');
+  tbody.innerHTML='';
+  Object.keys(clients).forEach(id=>{
+    const c=clients[id];
+    const balance=computeBalance(c);
+    const status=balance>0?'Outstanding':'Paid';
+    if(currentFilter!=='all' && status.toLowerCase()!==currentFilter) return;
+    let lastDate='', lastRemarks='';
+    if(c.history && c.history.length>0){
+      const last=c.history[c.history.length-1];
+      lastDate=last.date; lastRemarks=last.remarks||'';
     }
-    function ensureClient(id, firstName = '', lastName = '') {
-      if (!clients[id]) {
-        clients[id] = { firstName, lastName, debit: 0, credit: 0, history: [] };
-      } else {
-        if (firstName) clients[id].firstName = firstName;
-        if (lastName) clients[id].lastName = lastName;
-      }
-    }
-    function balanceOf(c) { return (Number(c.debit) || 0) - (Number(c.credit) || 0); }
+    tbody.insertAdjacentHTML('beforeend',`
+      <tr>
+        <td>${id}</td>
+        <td>${c.firstName||''} ${c.lastName||''}</td>
+        <td>${(c.debit||0).toFixed(2)}</td>
+        <td>${(c.credit||0).toFixed(2)}</td>
+        <td>${balance.toFixed(2)}</td>
+        <td>${status}</td>
+        <td>${lastDate}</td>
+        <td>${lastRemarks}</td>
+      </tr>
+    `);
+  });
+}
 
-    // Rendering summary table with filter and last date/remarks
-    function renderSummary() {
-      const tbody = document.querySelector('#clientsTable tbody');
-      tbody.innerHTML = '';
-      Object.keys(clients).forEach(id => {
-        const c = clients[id];
-        const balance = balanceOf(c);
-        const status = balance > 0 ? 'Outstanding' : 'Paid';
-        if (currentFilter !== 'all' && status.toLowerCase() !== currentFilter) return;
-
-        let lastDate = '', lastRemarks = '';
-        if (c.history.length > 0) {
-          const last = c.history[c.history.length - 1];
-          lastDate = last.date;
-          lastRemarks = last.remarks || '';
-        }
-
-        tbody.insertAdjacentHTML('beforeend', `
-          <tr class="${status === 'Outstanding' ? 'status-outstanding' : 'status-paid'}">
+function populateHistory(matches){
+  const tbody=document.querySelector('#historyTable tbody');
+  tbody.innerHTML='';
+  matches.forEach(({id,client})=>{
+    if(!client.history||client.history.length===0){
+      tbody.insertAdjacentHTML('beforeend',`
+        <tr><td>${id}</td><td>${client.firstName||''} ${client.lastName||''}</td>
+        <td colspan="5" style="text-align:center;">No transactions recorded yet</td></tr>`);
+    } else {
+      client.history.forEach(p=>{
+        tbody.insertAdjacentHTML('beforeend',`
+          <tr>
             <td>${id}</td>
-            <td>${c.firstName || ''} ${c.lastName || ''}</td>
-            <td>${(c.debit || 0).toFixed(2)}</td>
-            <td>${(c.credit || 0).toFixed(2)}</td>
-            <td>${balance.toFixed(2)}</td>
-            <td>${status}</td>
-            <td>${lastDate}</td>
-            <td>${lastRemarks}</td>
+            <td>${client.firstName||''} ${client.lastName||''}</td>
+            <td>${p.date}</td>
+            <td>${(p.debit||0).toFixed(2)}</td>
+            <td>${(p.credit||0).toFixed(2)}</td>
+            <td>${p.method||''}</td>
+            <td>${p.remarks||''}</td>
           </tr>
         `);
       });
     }
-
-    // Populate history for matched clients
-    function populateHistory(matches) {
-      const tbody = document.querySelector('#historyTable tbody');
-      tbody.innerHTML = '';
-      matches.forEach(({ id, client }) => {
-        if (!client.history || client.history.length === 0) {
-          tbody.insertAdjacentHTML('beforeend', `
-            <tr>
-              <td>${id}</td>
-              <td>${client.firstName || ''} ${client.lastName || ''}</td>
-              <td colspan="5" style="text-align:center;">No transactions recorded yet</td>
-            </tr>
-          `);
-        } else {
-          client.history.forEach(p => {
-            tbody.insertAdjacentHTML('beforeend', `
-              <tr>
-                <td>${id}</td>
-                <td>${client.firstName || ''} ${client.lastName || ''}</td>
-                <td>${p.date}</td>
-                <td>${(p.debit || 0).toFixed(2)}</td>
-                <td>${(p.credit || 0).toFixed(2)}</td>
-                <td>${p.method || ''}</td>
-                <td>${p.remarks || ''}</td>
-              </tr>
-            `);
-          });
-        }
-      });
-    }
-
-    // Search by ID or name
-    function viewClientRecord(term) {
-      const t = (term || '').trim();
-      if (!t) { alert('Enter a client ID, first name, or surname.'); return; }
-
-      const lower = t.toLowerCase();
-      let matches = [];
-
-      if (clients[t]) {
-        matches = [{ id: t, client: clients[t] }];
-      } else {
-        matches = Object.keys(clients)
-          .map(id => ({ id, client: clients[id] }))
-          .filter(({ client }) =>
-            (client.firstName || '').toLowerCase().includes(lower) ||
-            (client.lastName || '').toLowerCase().includes(lower)
-          );
-      }
-
-      if (matches.length === 0) { alert('No matching client found.'); return; }
-      populateHistory(matches);
-    }
-
-    function viewAllRecords() {
-      const matches = Object.keys(clients).map(id => ({ id, client: clients[id] }));
-      populateHistory(matches);
-    }
-
-    // Wire events once DOM is ready
-    document.addEventListener('DOMContentLoaded', () => {
-      renderSummary();
-
-      // Filter buttons
-      document.getElementById('filterAll').addEventListener('click', () => { currentFilter = 'all'; renderSummary(); });
-      document.getElementById('filterOutstanding').addEventListener('click', () => { currentFilter = 'outstanding'; renderSummary(); });
-      document.getElementById('filterPaid').addEventListener('click', () => { currentFilter = 'paid'; renderSummary(); });
-
-      // Search buttons
-      document.getElementById('searchBtn').addEventListener('click', () => {
-        const term = document.getElementById('searchInput').value;
-        viewClientRecord(term);
-      });
-      document.getElementById('viewAllBtn').addEventListener('click', viewAllRecords);
-
-      // Add Charge
-      document.getElementById('chargeForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-        const id = document.getElementById('chargeClientId').value.trim();
-        const firstName = document.getElementById('chargeFirstName').value.trim();
-        const lastName = document.getElementById('chargeLastName').value.trim();
-        const amount = parseFloat(document.getElementById('chargeAmount').value);
-        const remarks = document.getElementById('chargeRemarks').value.trim();
-
-        if (!id || isNaN(amount) || amount <= 0) {
-          alert('Please fill in valid client ID and charge amount.');
-          return;
-        }
-
-        ensureClient(id, firstName, lastName);
-        clients[id].debit += amount;
-        clients[id].history.push({
-          date: new Date().toLocaleString(),
-          debit: amount,
-          credit: 0,
-          method: 'charge',
-          remarks
-        });
-
-        save();
-        renderSummary();
-        alert(`Charge added successfully for ${clients[id].firstName || ''} ${clients[id].lastName || ''} (ID: ${id})`);
-        this.reset();
-      });
-
-      // Add Payment
-      document.getElementById('paymentForm').addEventListener('submit', function (e) {
-        e.preventDefault();
-        const id = document.getElementById('clientId').value.trim();
-        const firstName = document.getElementById('firstName').value.trim();
-        const lastName = document.getElementById('lastName').value.trim();
-        const amount = parseFloat(document.getElementById('amount').value);
-        const method = document.getElementById('method').value;
-        const remarks = document.getElementById('remarks').value.trim();
-
-        if (!id || !firstName || !lastName || isNaN(amount) || amount <= 0) {
-          alert('Please fill in valid client details and payment amount.');
-          return;
-        }
-
-        ensureClient(id, firstName, lastName);
-        clients[id].credit += amount;
-        clients[id].history.push({
-          date: new Date().toLocaleString(),
-          debit: 0,
-          credit: amount,
-          method,
-          remarks
-        });
-
-        save();
-        renderSummary();
-        alert(`Payment added successfully for ${firstName} ${lastName} (ID: ${id})`);
-        this.reset();
-    <script>
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("service-worker.js")
-      .then(() => console.log("Service Worker registered"));
-  }
-</script>
-      });
-    });
-  </script>
-</body>
-</html>
-
-{
-  "name": "Client Payment Tracker",
-  "short_name": "Payments",
-  "start_url": "index.html",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#2ecc71",
-  "icons": [
-    {
-      "src": "icon.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "icon.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+  });
 }
 
+function viewClientRecord(term){
+  const t=(term||'').trim();
+  if(!t){alert('Enter a client ID, first name, or surname.');return;}
+  const lower=t.toLowerCase();
+  let matches=[];
+  if(clients[t]) matches=[{id:t,client:clients[t]}];
+  else matches=Object.keys(clients).map(id=>({id,client:clients[id]}))
+    .filter(({client})=>(client.firstName||'').toLowerCase().includes(lower)||(client.lastName||'').toLowerCase().includes(lower));
+  if(matches.length===0){alert('No matching client found.');return;}
+  populateHistory(matches);
+}
 
+function viewAllRecords(){
+  const matches=Object.keys(clients).map(id=>({id,client:clients[id]}));
+  populateHistory(matches);
+}
 
+// Events
+document.addEventListener('DOMContentLoaded',()=>{
+  renderTable();
+  document.getElementById('filterAll').addEventListener('click',()=>{currentFilter='all';renderTable();});
+  document.getElementById('filterOutstanding').addEventListener('click',()=>{currentFilter='outstanding';renderTable();});
+  document.getElementById('filterPaid').addEventListener('click',()=>{currentFilter='paid';renderTable();});
+  document.getElementById('searchBtn').addEventListener('click',()=>viewClientRecord(document.getElementById('searchInput').value));
+  document.getElementById('viewAllBtn').addEventListener('click',viewAllRecords);
+});
+
+// Add Charge
+document.getElementById('chargeForm').addEventListener('submit',function(e){
+  e.preventDefault();
+  const id=document.getElementById('chargeClientId').value.trim();
+  const fn=document.getElementById('chargeFirstName').value.trim();
+  const ln=document.getElementById('chargeLastName').value.trim();
+  const amt=parseFloat(document.getElementById('chargeAmount').value);
+  const remarks=document.getElementById('chargeRemarks').value.trim();
+  if(!id||isNaN(amt)||amt<=0){alert('Invalid charge');return;}
+  if(!clients[id]) clients[id]={firstName:fn,lastName:ln,debit:0,credit:0,history:[]};
+  else {if(fn)clients[id].firstName=fn;if(ln)clients[id].lastName=ln;}
+  clients[id].debit+=amt;
+  clients[id].history.push({date:new Date().toLocaleString(),debit:amt,credit:0,method:'charge',remarks});
+  save();renderTable();
+  alert(`Charge added successfully for ${clients[id].firstName||''} ${clients[id].lastName||''} (ID:${id})`);
+  this.reset();
+});
+
+// Add Payment
+document.getElementById('paymentForm').addEventListener('submit',function(e){
+  e.preventDefault();
+  const id=document.getElementById('clientId').value.trim();
+  const fn=document.getElementById('firstName').value.trim();
+  const ln=document.getElementById('lastName').value.trim();
+  const amt=parseFloat(document.getElementById('amount').value);
+  const method=document.getElementById('method').value;
+  const remarks=document.getElementById('remarks').value.trim();
+  if(!id||!fn||!ln||isNaN(amt
